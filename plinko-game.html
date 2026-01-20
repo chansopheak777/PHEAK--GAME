@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plinko Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            gap: 15px;
+        }
+
+        .stat-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            text-align: center;
+            flex: 1;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        #gameCanvas {
+            border: 3px solid #333;
+            border-radius: 10px;
+            display: block;
+            margin: 0 auto;
+            background: #2c3e50;
+            cursor: pointer;
+        }
+
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .instructions {
+            text-align: center;
+            margin-top: 15px;
+            color: #666;
+            font-size: 0.95em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎰 PLINKO GAME</h1>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-label">Total Wins</div>
+                <div class="stat-value" id="totalWins">$0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Last Win</div>
+                <div class="stat-value" id="lastWin">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Drops</div>
+                <div class="stat-value" id="dropCount">0</div>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas" width="700" height="600"></canvas>
+        
+        <div class="controls">
+            <button onclick="dropBall()">DROP BALL</button>
+            <button onclick="resetGame()">RESET</button>
+        </div>
+        
+        <div class="instructions">
+            Click "DROP BALL" or click anywhere on the board to play!
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game settings
+        const pegRadius = 4;
+        const ballRadius = 8;
+        const rows = 12;
+        const cols = 15;
+        const pegSpacing = 45;
+        const startX = 50;
+        const startY = 50;
+        const gravity = 0.4;
+        const bounce = 0.6;
+
+        // Prize values matching the image (10 slots)
+        const prizes = [100, 20, 5, 50, 5, 200, 5, 50, 20, 100];
+        const prizeColors = ['#FFD700', '#FFA500', '#FF6B6B', '#4ECDC4', '#FF6B6B', '#00FF00', '#FF6B6B', '#4ECDC4', '#FFA500', '#FFD700'];
+
+        // Game state
+        let balls = [];
+        let pegs = [];
+        let totalWins = 0;
+        let dropCount = 0;
+
+        // Create pegs in a triangular pattern
+        function createPegs() {
+            pegs = [];
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const x = startX + col * pegSpacing + (row % 2 === 0 ? 0 : pegSpacing / 2);
+                    const y = startY + row * pegSpacing;
+                    pegs.push({ x, y });
+                }
+            }
+        }
+
+        // Ball class
+        class Ball {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = 0;
+                this.radius = ballRadius;
+                this.active = true;
+                this.color = `hsl(${Math.random() * 360}, 70%, 60%)`;
+            }
+
+            update() {
+                if (!this.active) return;
+
+                // Apply gravity
+                this.vy += gravity;
+                
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Check collision with pegs
+                pegs.forEach(peg => {
+                    const dx = this.x - peg.x;
+                    const dy = this.y - peg.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < this.radius + pegRadius) {
+                        // Calculate bounce angle
+                        const angle = Math.atan2(dy, dx);
+                        const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                        
+                        this.vx = Math.cos(angle) * speed * bounce;
+                        this.vy = Math.sin(angle) * speed * bounce;
+                        
+                        // Move ball away from peg
+                        const overlap = this.radius + pegRadius - distance;
+                        this.x += Math.cos(angle) * overlap;
+                        this.y += Math.sin(angle) * overlap;
+                    }
+                });
+
+                // Wall collision
+                if (this.x - this.radius < 0) {
+                    this.x = this.radius;
+                    this.vx *= -bounce;
+                }
+                if (this.x + this.radius > canvas.width) {
+                    this.x = canvas.width - this.radius;
+                    this.vx *= -bounce;
+                }
+
+                // Check if ball reached bottom
+                if (this.y > canvas.height - 80) {
+                    this.active = false;
+                    this.calculatePrize();
+                }
+            }
+
+            calculatePrize() {
+                const slotWidth = canvas.width / prizes.length;
+                const slotIndex = Math.floor(this.x / slotWidth);
+                const prize = prizes[Math.min(slotIndex, prizes.length - 1)];
+                
+                totalWins += prize;
+                document.getElementById('totalWins').textContent = `$${totalWins.toLocaleString()}`;
+                document.getElementById('lastWin').textContent = `$${prize}`;
+                
+                // Flash the winning slot
+                this.flashSlot(slotIndex);
+            }
+
+            flashSlot(index) {
+                const slotWidth = canvas.width / prizes.length;
+                const x = index * slotWidth;
+                
+                let flashes = 0;
+                const flashInterval = setInterval(() => {
+                    ctx.fillStyle = flashes % 2 === 0 ? '#FFFF00' : prizeColors[index];
+                    ctx.fillRect(x, canvas.height - 70, slotWidth - 2, 60);
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(prizes[index], x + slotWidth / 2, canvas.height - 35);
+                    
+                    flashes++;
+                    if (flashes > 6) clearInterval(flashInterval);
+                }, 100);
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.closePath();
+            }
+        }
+
+        function drawPegs() {
+            pegs.forEach(peg => {
+                ctx.beginPath();
+                ctx.arc(peg.x, peg.y, pegRadius, 0, Math.PI * 2);
+                ctx.fillStyle = '#95a5a6';
+                ctx.fill();
+                ctx.strokeStyle = '#7f8c8d';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.closePath();
+            });
+        }
+
+        function drawPrizeSlots() {
+            const slotWidth = canvas.width / prizes.length;
+            
+            for (let i = 0; i < prizes.length; i++) {
+                const x = i * slotWidth;
+                
+                // Draw slot
+                ctx.fillStyle = prizeColors[i];
+                ctx.fillRect(x, canvas.height - 70, slotWidth - 2, 60);
+                
+                // Draw border
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, canvas.height - 70, slotWidth - 2, 60);
+                
+                // Draw prize value
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(prizes[i], x + slotWidth / 2, canvas.height - 35);
+            }
+        }
+
+        function dropBall() {
+            const x = canvas.width / 2 + (Math.random() - 0.5) * 100;
+            balls.push(new Ball(x, 20));
+            dropCount++;
+            document.getElementById('dropCount').textContent = dropCount;
+        }
+
+        function resetGame() {
+            balls = [];
+            totalWins = 0;
+            dropCount = 0;
+            document.getElementById('totalWins').textContent = '$0';
+            document.getElementById('lastWin').textContent = '-';
+            document.getElementById('dropCount').textContent = '0';
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawPrizeSlots();
+            drawPegs();
+            
+            // Update and draw balls
+            balls.forEach((ball, index) => {
+                ball.update();
+                ball.draw();
+                
+                // Remove inactive balls after delay
+                if (!ball.active && ball.y > canvas.height) {
+                    balls.splice(index, 1);
+                }
+            });
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Click to drop ball
+        canvas.addEventListener('click', dropBall);
+
+        // Initialize game
+        createPegs();
+        gameLoop();
+    </script>
+</body>
+</html>
